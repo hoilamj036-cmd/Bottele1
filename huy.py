@@ -12,7 +12,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
-BOT_TOKEN = "8036483570:AAEE9TVmC6GGm7ptTqxFr7uats2NbshuChA"
+BOT_TOKEN = "8036483570:AAFdU09wNyMmM_106cg4WTZG41ZACf6YzIY"
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -22,8 +22,7 @@ def home():
     return "Bot is alive! Running on Render."
 
 def run_http():
-    # --- QUAN TRỌNG: Lấy PORT từ hệ thống Render ---
-    # Nếu không lấy đúng PORT này, Render sẽ báo lỗi và tắt bot
+    # Lấy PORT từ biến môi trường của Render
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -189,7 +188,7 @@ async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Reset toàn bộ: Tổng, Lần, Mail và Ca về mặc định
+    # Reset toàn bộ: Tổng, Lần, Mail và Ca
     set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1")
     await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống), Ca=Ca 1.")
 
@@ -241,7 +240,10 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await msg.reply_text("❌ Lỗi: Thiếu IP hoặc RP.")
 
     text = format_template(cfg, ip=ip, rp=rp)
-    await msg.reply_text(text, quote=True)
+    
+    # --- ĐÃ SỬA DÒNG NÀY ĐỂ FIX LỖI ---
+    # Thay quote=True bằng reply_to_message_id
+    await msg.reply_text(text, reply_to_message_id=msg.message_id)
 
 def main():
     if not BOT_TOKEN:
@@ -252,7 +254,6 @@ def main():
     keep_alive()
 
     # --- TĂNG THỜI GIAN KẾT NỐI (TIMEOUT) ---
-    # Giúp bot hoạt động ổn định hơn trên môi trường mạng kém hoặc server free
     app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).build()
 
     app.add_handler(CommandHandler("start", menu_command))
