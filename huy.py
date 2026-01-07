@@ -2,34 +2,50 @@ import os
 import re
 import json
 import time
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, Dict, Any, List
 
+# Thư viện cho web server ảo và Telegram
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-DATA_FILE = "bot_data.json"
+# --- CẤU HÌNH TOKEN ---
+BOT_TOKEN = "8036483570:AAEE9TVmC6GGm7ptTqxFr7uats2NbshuChA"
 
-# --- CẤU HÌNH TOKEN TRỰC TIẾP ---
-BOT_TOKEN = "8036483570:AAFdU09wNyMmM_106cg4WTZG41ZACf6YzIY"
+# --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is alive! Running on Render."
+
+def run_http():
+    # --- QUAN TRỌNG: Lấy PORT từ hệ thống Render ---
+    # Nếu không lấy đúng PORT này, Render sẽ báo lỗi và tắt bot
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run_http)
+    t.start()
+# ---------------------------------------
+
+DATA_FILE = "bot_data.json"
 
 # Cấu hình mặc định
 DEFAULTS: Dict[str, Any] = {
-    # Các thông số cố định
     "handle": "@baobubuoihihi36",
     "imei": "865201076151404",
     "lines_fixed": ["Tân thủ", "Qli hcb"],
     
-    # Các biến thay đổi
     "total": 0,
     "l_count": 0,
     "mail": "",         
     "ca": "Ca 1",
     
-    # Biến để theo dõi ngày hoạt động gần nhất (dùng để auto reset)
     "last_active_date": "",
-
-    # Chống spam/trùng lặp
     "seen_message_ids": [],
     "last_video_unique_id": "",
     "last_video_ts": 0.0,
@@ -102,7 +118,6 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
     current_l = int(cfg.get("l_count", 0))
 
     if last_date != date_str:
-        # Nếu khác ngày => Reset về 0
         current_total = 0
         current_l = 0
         set_chat_cfg(cfg["_chat_id"], last_active_date=date_str)
@@ -174,7 +189,7 @@ async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Reset toàn bộ: Tổng, Lần, Mail và Ca
+    # Reset toàn bộ: Tổng, Lần, Mail và Ca về mặc định
     set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1")
     await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống), Ca=Ca 1.")
 
@@ -233,7 +248,12 @@ def main():
         print("⚠️ CHƯA CÓ BOT_TOKEN")
         return
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    # --- KHỞI ĐỘNG WEB SERVER ---
+    keep_alive()
+
+    # --- TĂNG THỜI GIAN KẾT NỐI (TIMEOUT) ---
+    # Giúp bot hoạt động ổn định hơn trên môi trường mạng kém hoặc server free
+    app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).build()
 
     app.add_handler(CommandHandler("start", menu_command))
     app.add_handler(CommandHandler("menu", menu_command))
@@ -251,4 +271,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
