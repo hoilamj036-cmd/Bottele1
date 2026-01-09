@@ -12,7 +12,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
-BOT_TOKEN = "8036483570:AAFdU09wNyMmM_106cg4WTZG41ZACf6YzIY"
+# THAY TOKEN MỚI VÀO DÒNG DƯỚI ĐÂY (XÓA CÁI CŨ ĐI)
+BOT_TOKEN = "8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4" 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -102,7 +103,8 @@ def parse_ip_rp_copy_style(text: str) -> Tuple[Optional[str], Optional[int]]:
     last = nums[-1]
     rp = int(last.group(0))
     ip_part = (t[:last.start()] + " " + t[last.end():]).strip()
-    ip_part = re.sub(r"\s+", " ", ip_part).strip(" |,-")
+    ip_part = re.sub(r"\s+", " ", ip_part).strip()
+    ip_part = ip_part.strip(" |,-")
     return (ip_part if ip_part else None), rp
 
 def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
@@ -177,7 +179,6 @@ async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     raw = " ".join(context.args).strip()
     
-    # Tự thêm chữ "Ca" nếu người dùng chỉ nhập số
     if raw.isdigit():
         ca = f"Ca {raw}"
     else:
@@ -188,7 +189,6 @@ async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Reset toàn bộ: Tổng, Lần, Mail và Ca
     set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1")
     await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống), Ca=Ca 1.")
 
@@ -220,7 +220,6 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg or not msg.video: return
 
-    # Chống spam/trùng lặp
     vu = msg.video.file_unique_id
     if vu == cfg.get("last_video_unique_id") and (time.time() - cfg.get("last_video_ts", 0)) < 10:
         return
@@ -241,19 +240,16 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = format_template(cfg, ip=ip, rp=rp)
     
-    # --- ĐÃ SỬA DÒNG NÀY ĐỂ FIX LỖI ---
-    # Thay quote=True bằng reply_to_message_id
+    # Reply chuẩn
     await msg.reply_text(text, reply_to_message_id=msg.message_id)
 
 def main():
-    if not BOT_TOKEN:
-        print("⚠️ CHƯA CÓ BOT_TOKEN")
+    if not BOT_TOKEN or "MỚI" in BOT_TOKEN:
+        print("⚠️ CẢNH BÁO: BẠN CHƯA THAY TOKEN MỚI VÀO CODE!")
         return
 
-    # --- KHỞI ĐỘNG WEB SERVER ---
     keep_alive()
 
-    # --- TĂNG THỜI GIAN KẾT NỐI (TIMEOUT) ---
     app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).build()
 
     app.add_handler(CommandHandler("start", menu_command))
