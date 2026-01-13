@@ -12,8 +12,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
-# Hãy dán Token của bạn vào đây
-8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4" 
+# Đã sửa lại đúng cú pháp (có đủ dấu ngoặc kép)
+BOT_TOKEN = "8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4"
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -261,7 +261,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not BOT_TOKEN or "MỚI" in BOT_TOKEN:
-        print("⚠️ CẢNH BÁO: BẠN CHƯA THAY TOKEN MỚI VÀO CODE!")
+        print("⚠️ CẢNH BÁO: CHƯA CÓ TOKEN")
         return
 
     keep_alive()
