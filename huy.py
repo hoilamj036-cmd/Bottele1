@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # --- CẤU HÌNH TOKEN ---
 # Đã sửa lại đúng cú pháp (có đủ dấu ngoặc kép)
-BOT_TOKEN = "8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4"
+BOT_TOKEN = "8412922032:AAHFZF0AGMXXFP5GNWhPpMfumRasQI6ELlk"
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
