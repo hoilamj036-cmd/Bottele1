@@ -12,8 +12,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
-# THAY TOKEN MỚI VÀO DÒNG DƯỚI ĐÂY (XÓA CÁI CŨ ĐI)
-BOT_TOKEN = "8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4" 
+# Hãy dán Token của bạn vào đây
+8412922032:AAE7cYXUijQJV8Oy6zhhewtKEfLvTgR4Li4" 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -154,7 +154,7 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "=== DANH SÁCH LỆNH ===\n"
-        "/setmail <mail> : Nhập mail\n"
+        "/setmail <mail> : Nhập mail (Tự động đổi thành @gmail.com)\n"
         "/setca <tên ca> : Nhập ca (VD: /setca 2)\n"
         "   -> Tự động thêm chữ 'Ca' nếu chỉ nhập số.\n"
         "\n--- RESET ---\n"
@@ -169,9 +169,24 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("Dùng: /setmail <mail mới>")
-    mail = context.args[0].strip()
-    set_chat_cfg(update.effective_chat.id, mail=mail)
-    await update.message.reply_text(f"✅ Đã lưu mail: {mail}")
+    
+    # 1. Lấy mail người dùng nhập
+    raw_mail = context.args[0].strip()
+    
+    # 2. Chuyển tất cả thành chữ thường
+    clean_mail = raw_mail.lower()
+    
+    # 3. Xử lý đuôi mail: Luôn đổi thành @gmail.com
+    if "@" in clean_mail:
+        # Nếu có @, lấy phần tên trước @ rồi ghép với @gmail.com
+        username = clean_mail.split("@")[0]
+        final_mail = f"{username}@gmail.com"
+    else:
+        # Nếu không có @, coi như đó là tên, ghép luôn
+        final_mail = f"{clean_mail}@gmail.com"
+
+    set_chat_cfg(update.effective_chat.id, mail=final_mail)
+    await update.message.reply_text(f"✅ Đã lưu mail: {final_mail}")
 
 async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -220,6 +235,7 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg or not msg.video: return
 
+    # Chống spam/trùng lặp
     vu = msg.video.file_unique_id
     if vu == cfg.get("last_video_unique_id") and (time.time() - cfg.get("last_video_ts", 0)) < 10:
         return
