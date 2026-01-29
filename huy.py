@@ -12,7 +12,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
-BOT_TOKEN = "8412922032:AAHFZF0AGMXXFP5GNWhPpMfumRasQI6ELlk"
+BOT_TOKEN = "8412922032:AAFVOpZBsKyBitg5hKD4a24T1TLj0ODRDRg"
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
