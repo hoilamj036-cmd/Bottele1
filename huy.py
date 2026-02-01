@@ -9,11 +9,12 @@ from typing import Optional, Tuple, Dict, Any, List
 # Thư viện cho web server ảo và Telegram
 from flask import Flask
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
 # 👇👇👇 DÁN TOKEN CỦA BẠN VÀO DƯỚI ĐÂY 👇👇👇
-BOT_TOKEN = "8412922032:AAHjoQLxySzcwRUcLv_jLObfam93Skc0GB4" 
+BOT_TOKEN = "8412922032:AAH-VKa10ewIH9TCLd-KaiLA6mw-gQwoJhc" 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -44,7 +45,7 @@ DEFAULTS: Dict[str, Any] = {
     "l_count": 0,
     "mail": "",         
     "ca": "Ca 1",
-    "gia": "1k3", # Giá mặc định
+    "gia": "1k3", 
     
     "last_active_date": "",
     "seen_message_ids": [],
@@ -84,6 +85,10 @@ def set_chat_cfg(chat_id: int, **kwargs) -> Dict[str, Any]:
     save_data(data)
     return cfg
 
+def get_vn_date_str() -> str:
+    now_vn = datetime.now(timezone.utc) + timedelta(hours=7)
+    return f"{now_vn.day:02d}/{now_vn.month:02d}"
+
 # --- LOGIC XỬ LÝ TEXT ---
 def parse_ip_rp_copy_style(text: str) -> Tuple[Optional[str], Optional[int]]:
     if not text: return None, None
@@ -108,12 +113,9 @@ def parse_ip_rp_copy_style(text: str) -> Tuple[Optional[str], Optional[int]]:
     ip_part = ip_part.strip(" |,-")
     return (ip_part if ip_part else None), rp
 
+# --- PHẦN TRANG TRÍ KÍ TỰ ĐẶC BIỆT ---
 def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
-    # 1. Lấy ngày giờ Việt Nam (UTC+7)
-    now_vn = datetime.now(timezone.utc) + timedelta(hours=7)
-    date_str = f"{now_vn.day:02d}/{now_vn.month:02d}"
-
-    # 2. Kiểm tra sang ngày mới -> AUTO RESET TOÀN BỘ (BAO GỒM GIÁ VỀ 1k3)
+    date_str = get_vn_date_str()
     last_date = cfg.get("last_active_date", "")
     
     current_total = int(cfg.get("total", 0))
@@ -122,148 +124,122 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
     current_ca = cfg.get("ca", "Ca 1")
     current_gia = cfg.get("gia", "1k3")
 
+    # KIỂM TRA RESET NGÀY MỚI
     if last_date != date_str:
-        # Nếu khác ngày => Reset về 0 và xóa sạch thông tin phiên cũ
         current_total = 0
         current_l = 0
-        current_mail = ""   # Reset mail
-        current_ca = "Ca 1" # Reset ca
-        current_gia = "1k3" # Reset giá về mặc định 1k3
+        current_mail = ""
+        current_ca = "Ca 1"
+        current_gia = "1k3"
         
-        # Lưu lại trạng thái reset ngay lập tức
         set_chat_cfg(cfg["_chat_id"], 
-                     total=0, 
-                     l_count=0, 
-                     mail="", 
-                     ca="Ca 1",
-                     gia="1k3", 
+                     total=0, l_count=0, mail="", ca="Ca 1", gia="1k3", 
                      last_active_date=date_str)
 
-    # 3. Tính toán cộng dồn
     new_total = current_total + rp
     new_l = current_l + 1
     
-    # Lưu lại data mới
     set_chat_cfg(cfg["_chat_id"], total=new_total, l_count=new_l, last_active_date=date_str)
 
-    # 4. Format nội dung
-    # Lấy lại giá mới nhất (có thể vừa bị reset ở trên)
-    # Lưu ý: Cần lấy từ cfg hoặc biến tạm nếu chưa reload
-    final_gia = cfg.get("gia", "1k3")
-    if last_date != date_str: final_gia = "1k3" # Đảm bảo hiển thị đúng ngay lần đầu reset
-
-    header = f"{date_str} bảo {rp}rp {final_gia} l{new_l}"
+    final_mail = current_mail if current_mail else "【⚠️ Chưa nhập Mail】"
+    final_ca = current_ca
+    final_gia = current_gia
     
+    # --- DESIGN MỚI: DÙNG KÍ TỰ ĐẶC BIỆT VÀ HTML ---
+    # Header dùng dấu ngoặc đặc biệt
+    header = f"『 <b>{date_str}</b> 』 · ‹ ⚡ <b>{rp} RP</b> › · ‹ 💎 <b>{final_gia}</b> › · ‹ ↻ <b>L{new_l}</b> ›"
+    
+    # Các dòng cố định dùng khung
     fixed_lines = [
-        "Tân thủ",
-        "Qli hcb",
-        "@baobubuoihihi36",
-        "Imei 865201076151404"
+        "【🔰】 <b>Tân thủ</b>",
+        "【🛡️】 <b>Qli hcb</b>",
+        "»» @baobubuoihihi36 ««",
+        "»» Imei <code>865201076151404</code> ««"
     ]
 
-    parts_final = [
-        header,
-        *fixed_lines,
-        f"Tổng {new_total}",
-        f"Mail {current_mail}",
-        f"Ip {ip}",
-        f"{current_ca}"
+    # Phần nội dung chính với dải phân cách
+    body = [
+        "⊱⋅ ──────────── ⋅⊰",
+        f"❖ <b>TỔNG: {new_total}</b> ❖",
+        f"[✉] Mail: <code>{final_mail}</code>",  
+        f"[🌐] IP: <code>{ip}</code>",          
+        f"「🕒 <b>{final_ca}</b>」"
     ]
 
+    parts_final = [header, *fixed_lines, *body]
     return "\n".join([p for p in parts_final if p])
 
 # --- CÁC LỆNH (COMMANDS) ---
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "=== DANH SÁCH LỆNH ===\n"
-        "/setmail <mail> : Nhập mail (Auto @gmail.com)\n"
-        "/setca <tên ca> : Nhập ca (VD: /setca 2)\n"
-        "/setgia <số> : 1=1k1, 3=1k3 (VD: /setgia 1)\n"
-        "\n--- RESET ---\n"
-        "/rs : Xoá TẤT CẢ (Tổng=0, Lần=0, Mail trống, Ca=Ca 1, Giá=1k3)\n"
-        "\n--- KHÁC ---\n"
-        "/status : Xem thông tin\n"
-        "*(Bot tự động reset TẤT CẢ khi qua ngày mới)*"
+        "╔═══════════════╗\n"
+        "   <b>☆ MENU ĐIỀU KHIỂN ☆</b>\n"
+        "╚═══════════════╝\n\n"
+        "‹✉› /setmail <code>mail</code> : Nhập mail (Auto @gmail)\n"
+        "‹🕒› /setca <code>tên ca</code> : Nhập ca\n"
+        "‹💎› /setgia <code>số</code> : 1=1k1, 3=1k3\n\n"
+        "⟬ <b>RESET OPTIONS</b> ⟭\n"
+        "‹↻› /rs : Xoá TẤT CẢ về mặc định\n\n"
+        "‹📊› /status : Xem thông tin\n"
+        "<i>(Bot tự động reset khi qua ngày mới)</i>",
+        parse_mode=ParseMode.HTML
     )
 
 async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        return await update.message.reply_text("Dùng: /setmail <mail mới>")
+    if not context.args: return await update.message.reply_text("[✖] Dùng: /setmail <mail mới>")
+    raw_mail = context.args[0].strip().lower()
+    final_mail = f"{raw_mail.split('@')[0]}@gmail.com" if "@" in raw_mail else f"{raw_mail}@gmail.com"
     
-    raw_mail = context.args[0].strip()
-    clean_mail = raw_mail.lower()
-    
-    if "@" in clean_mail:
-        username = clean_mail.split("@")[0]
-        final_mail = f"{username}@gmail.com"
-    else:
-        final_mail = f"{clean_mail}@gmail.com"
-
-    set_chat_cfg(update.effective_chat.id, mail=final_mail)
-    await update.message.reply_text(f"✅ Đã lưu mail: {final_mail}")
+    set_chat_cfg(update.effective_chat.id, mail=final_mail, last_active_date=get_vn_date_str())
+    await update.message.reply_text(f"【✔】 <b>Đã lưu mail:</b> <code>{final_mail}</code>", parse_mode=ParseMode.HTML)
 
 async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        return await update.message.reply_text("Dùng: /setca <số ca> (Ví dụ: /setca 2)")
-    
+    if not context.args: return await update.message.reply_text("[✖] Dùng: /setca <số ca>")
     raw = " ".join(context.args).strip()
+    ca = f"Ca {raw}" if raw.isdigit() else raw
     
-    if raw.isdigit():
-        ca = f"Ca {raw}"
-    else:
-        ca = raw
-        
-    set_chat_cfg(update.effective_chat.id, ca=ca)
-    await update.message.reply_text(f"✅ Đã lưu ca: {ca}")
+    set_chat_cfg(update.effective_chat.id, ca=ca, last_active_date=get_vn_date_str())
+    await update.message.reply_text(f"【✔】 <b>Đã lưu ca:</b> {ca}", parse_mode=ParseMode.HTML)
 
 async def setgia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        return await update.message.reply_text("Dùng: /setgia 1 (-> 1k1) hoặc /setgia 3 (-> 1k3)")
-    
-    raw_input = context.args[0].strip()
-    
-    # --- LOGIC MỚI CHO GIÁ ---
-    if raw_input == "1":
-        gia_moi = "1k1"
-    elif raw_input == "3":
-        gia_moi = "1k3"
-    else:
-        # Nếu nhập khác (VD: 1k2, 1k5...) thì giữ nguyên
-        gia_moi = " ".join(context.args).strip()
+    if not context.args: return await update.message.reply_text("[✖] Dùng: /setgia 1 hoặc 3")
+    raw = context.args[0].strip()
+    if raw == "1": gia = "1k1"
+    elif raw == "3": gia = "1k3"
+    else: gia = " ".join(context.args).strip()
 
-    set_chat_cfg(update.effective_chat.id, gia=gia_moi)
-    await update.message.reply_text(f"✅ Đã đổi giá thành: {gia_moi}")
+    set_chat_cfg(update.effective_chat.id, gia=gia, last_active_date=get_vn_date_str())
+    await update.message.reply_text(f"【✔】 <b>Đã đổi giá:</b> {gia}", parse_mode=ParseMode.HTML)
 
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Reset toàn bộ (Bao gồm giá về 1k3)
-    set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1", gia="1k3")
-    await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống), Ca=Ca 1, Giá=1k3.")
+    set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1", gia="1k3", last_active_date=get_vn_date_str())
+    await update.message.reply_text("⟬♻️⟭ <b>Đã RESET toàn bộ dữ liệu!</b>", parse_mode=ParseMode.HTML)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cfg = get_chat_cfg(update.effective_chat.id)
-    await update.message.reply_text(
-        f"Ca: {cfg.get('ca')}\n"
-        f"Giá: {cfg.get('gia', '1k3')}\n"
-        f"Tổng: {cfg.get('total')}\n"
-        f"Lần: {cfg.get('l_count')}\n"
-        f"Mail: {cfg.get('mail')}\n"
-        f"Ngày check: {cfg.get('last_active_date')} (VN)"
+    text = (
+        f"╔══ <b>TRẠNG THÁI HIỆN TẠI</b> ══╗\n"
+        f" 🕒 Ca: <b>{cfg.get('ca')}</b>\n"
+        f" 💎 Giá: <b>{cfg.get('gia', '1k3')}</b>\n"
+        f" 🏆 Tổng: <b>{cfg.get('total')}</b>\n"
+        f" ↻ Lần: <b>{cfg.get('l_count')}</b>\n"
+        f" ✉ Mail: <code>{cfg.get('mail')}</code>\n"
+        f" 📅 Ngày check: {cfg.get('last_active_date')}\n"
+        f"╚══════════════════╝"
     )
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     cfg = get_chat_cfg(chat_id)
     cfg["_chat_id"] = chat_id
-
     msg = update.message
     if not msg or not msg.video: return
 
-    # Chống spam/trùng lặp
     vu = msg.video.file_unique_id
-    if vu == cfg.get("last_video_unique_id") and (time.time() - cfg.get("last_video_ts", 0)) < 10:
-        return
+    if vu == cfg.get("last_video_unique_id") and (time.time() - cfg.get("last_video_ts", 0)) < 10: return
     set_chat_cfg(chat_id, last_video_unique_id=vu, last_video_ts=time.time())
 
     mid = msg.message_id
@@ -274,25 +250,19 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     caption = (msg.caption or "").strip()
     if msg.media_group_id and not caption: return
-
     ip, rp = parse_ip_rp_copy_style(caption)
-    if not ip or rp is None:
-        return await msg.reply_text("❌ Lỗi: Thiếu IP hoặc RP.")
+    if not ip or rp is None: return await msg.reply_text("【✖】 <b>Lỗi:</b> Không tìm thấy IP hoặc RP.", parse_mode=ParseMode.HTML)
 
     text = format_template(cfg, ip=ip, rp=rp)
     
-    # Reply chuẩn
-    await msg.reply_text(text, reply_to_message_id=msg.message_id)
+    await msg.reply_text(text, reply_to_message_id=msg.message_id, parse_mode=ParseMode.HTML)
 
 def main():
-    if not BOT_TOKEN or "PASTE_YOUR_NEW_TOKEN_HERE" in BOT_TOKEN:
+    if not BOT_TOKEN or "TOKEN" in BOT_TOKEN:
         print("⚠️ CẢNH BÁO: CHƯA CÓ TOKEN")
         return
-
     keep_alive()
-
     app = Application.builder().token(BOT_TOKEN).connect_timeout(30).read_timeout(30).build()
-
     app.add_handler(CommandHandler("start", menu_command))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("setmail", setmail))
@@ -300,9 +270,7 @@ def main():
     app.add_handler(CommandHandler("setgia", setgia))
     app.add_handler(CommandHandler("rs", rs))
     app.add_handler(CommandHandler("status", status))
-
     app.add_handler(MessageHandler(filters.VIDEO, on_video))
-
     print("Bot đang chạy...")
     app.run_polling(drop_pending_updates=True)
 
