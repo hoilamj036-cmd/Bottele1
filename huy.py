@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # --- CẤU HÌNH TOKEN ---
 # 👇👇👇 DÁN TOKEN CỦA BẠN VÀO DƯỚI ĐÂY 👇👇👇
-BOT_TOKEN = "8412922032:AAFJQbG0AE9ky4LZt8o1qXBIlN0SoSNHF0A" 
+BOT_TOKEN = "8412922032:AAHnZ9c_q4jZLvMq8x5Qxh_a-pPh8O5_yF4" 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -43,8 +43,6 @@ DEFAULTS: Dict[str, Any] = {
     "total": 0,
     "l_count": 0,
     "mail": "",         
-    "ca": "Ca 1",
-    "gia": "1k3", 
     
     "last_active_date": "",
     "seen_message_ids": [],
@@ -84,10 +82,27 @@ def set_chat_cfg(chat_id: int, **kwargs) -> Dict[str, Any]:
     save_data(data)
     return cfg
 
-# --- HÀM LẤY NGÀY VN (Để dùng nhiều chỗ) ---
+# --- HÀM THỜI GIAN ---
+def get_vn_time():
+    return datetime.now(timezone.utc) + timedelta(hours=7)
+
 def get_vn_date_str() -> str:
-    now_vn = datetime.now(timezone.utc) + timedelta(hours=7)
-    return f"{now_vn.day:02d}/{now_vn.month:02d}"
+    now = get_vn_time()
+    return f"{now.day:02d}/{now.month:02d}"
+
+# --- TÍNH CA TỰ ĐỘNG ---
+def get_auto_ca() -> str:
+    now = get_vn_time()
+    h = now.hour
+    # 6h - 15h: Ca 1
+    if 6 <= h < 15:
+        return "Ca 1"
+    # 15h - 19h: Ca 2
+    elif 15 <= h < 19:
+        return "Ca 2"
+    # 19h - 6h sáng hôm sau: Ca 3
+    else:
+        return "Ca 3"
 
 # --- LOGIC XỬ LÝ TEXT ---
 def parse_ip_rp_copy_style(text: str) -> Tuple[Optional[str], Optional[int]]:
@@ -120,21 +135,20 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
     current_total = int(cfg.get("total", 0))
     current_l = int(cfg.get("l_count", 0))
     current_mail = cfg.get("mail", "")
-    current_ca = cfg.get("ca", "Ca 1")
-    current_gia = cfg.get("gia", "1k3")
+    
+    # --- TỰ ĐỘNG TÍNH CA VÀ GIÁ ---
+    auto_ca = get_auto_ca()
+    fixed_gia = "1k" # Giá cố định
 
     # KIỂM TRA RESET NGÀY MỚI
-    # Nếu last_date khác date_str thì mới reset
     if last_date != date_str:
         current_total = 0
         current_l = 0
-        current_mail = ""   # Reset mail
-        current_ca = "Ca 1" # Reset ca
-        current_gia = "1k3" # Reset giá
+        current_mail = ""   # Reset mail khi qua ngày mới
         
-        # Lưu lại trạng thái reset ngay lập tức
+        # Lưu lại trạng thái reset
         set_chat_cfg(cfg["_chat_id"], 
-                     total=0, l_count=0, mail="", ca="Ca 1", gia="1k3", 
+                     total=0, l_count=0, mail="", 
                      last_active_date=date_str)
 
     # Tính toán cộng dồn
@@ -144,13 +158,11 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
     # Lưu lại data mới
     set_chat_cfg(cfg["_chat_id"], total=new_total, l_count=new_l, last_active_date=date_str)
 
-    # Lấy lại giá trị để hiển thị (đề phòng vừa bị reset)
+    # Lấy lại giá trị mail (phòng trường hợp vừa bị reset)
     final_mail = current_mail
-    final_ca = current_ca
-    final_gia = current_gia
     
     # Format nội dung
-    header = f"{date_str} bảo {rp}rp {final_gia} l{new_l}"
+    header = f"{date_str} bảo {rp}rp {fixed_gia} l{new_l}"
     fixed_lines = ["Tân thủ", "Qli hcb", "@baobubuoihihi36", "Imei 865201076151404"]
     parts_final = [
         header,
@@ -158,7 +170,7 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
         f"Tổng {new_total}",
         f"Mail {final_mail}",
         f"Ip {ip}",
-        f"{final_ca}"
+        f"{auto_ca}" # Ca tự động
     ]
 
     return "\n".join([p for p in parts_final if p])
@@ -169,12 +181,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "=== DANH SÁCH LỆNH ===\n"
         "/setmail <mail> : Nhập mail (Auto @gmail.com)\n"
-        "/setca <tên ca> : Nhập ca (VD: /setca 2)\n"
-        "/setgia <số> : 1=1k1, 3=1k3 (VD: /setgia 1)\n"
-        "\n--- RESET ---\n"
-        "/rs : Xoá TẤT CẢ (Về 0, Mail trống, Ca 1, Giá 1k3)\n"
-        "\n--- KHÁC ---\n"
+        "/rs : Xoá TẤT CẢ (Về 0, Mail trống)\n"
         "/status : Xem thông tin\n"
+        "\n--- CỐ ĐỊNH ---\n"
+        "• Giá: 1k\n"
+        "• Ca: Tự động (6h-15h: Ca1, 15h-19h: Ca2, 19h-6h: Ca3)\n"
         "*(Bot tự động reset TẤT CẢ khi qua ngày mới)*"
     )
 
@@ -183,40 +194,28 @@ async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_mail = context.args[0].strip().lower()
     final_mail = f"{raw_mail.split('@')[0]}@gmail.com" if "@" in raw_mail else f"{raw_mail}@gmail.com"
     
-    # --- QUAN TRỌNG: CẬP NHẬT LUÔN NGÀY ĐỂ KHÔNG BỊ RESET SAU ĐÓ ---
+    # CẬP NHẬT NGÀY LUÔN ĐỂ KHÔNG BỊ RESET KHI GỬI VIDEO
     set_chat_cfg(update.effective_chat.id, mail=final_mail, last_active_date=get_vn_date_str())
     await update.message.reply_text(f"✅ Đã lưu mail: {final_mail}")
 
-async def setca(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args: return await update.message.reply_text("Dùng: /setca <số ca>")
-    raw = " ".join(context.args).strip()
-    ca = f"Ca {raw}" if raw.isdigit() else raw
-    
-    # CẬP NHẬT NGÀY LUÔN
-    set_chat_cfg(update.effective_chat.id, ca=ca, last_active_date=get_vn_date_str())
-    await update.message.reply_text(f"✅ Đã lưu ca: {ca}")
-
-async def setgia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args: return await update.message.reply_text("Dùng: /setgia 1 (-> 1k1) hoặc /setgia 3 (-> 1k3)")
-    raw = context.args[0].strip()
-    if raw == "1": gia = "1k1"
-    elif raw == "3": gia = "1k3"
-    else: gia = " ".join(context.args).strip()
-
-    # CẬP NHẬT NGÀY LUÔN
-    set_chat_cfg(update.effective_chat.id, gia=gia, last_active_date=get_vn_date_str())
-    await update.message.reply_text(f"✅ Đã đổi giá thành: {gia}")
-
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Reset chủ động thì cũng cập nhật ngày luôn
-    set_chat_cfg(chat_id, total=0, l_count=0, mail="", ca="Ca 1", gia="1k3", last_active_date=get_vn_date_str())
-    await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống), Ca=Ca 1, Giá=1k3.")
+    # Reset toàn bộ
+    set_chat_cfg(chat_id, total=0, l_count=0, mail="", last_active_date=get_vn_date_str())
+    await update.message.reply_text("✅ Đã xoá sạch: Tổng=0, Lần=0, Mail=(trống).")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cfg = get_chat_cfg(update.effective_chat.id)
+    # Tính Ca hiện tại để hiển thị
+    current_ca = get_auto_ca()
+    
     await update.message.reply_text(
-        f"Ca: {cfg.get('ca')}\nGiá: {cfg.get('gia', '1k3')}\nTổng: {cfg.get('total')}\nLần: {cfg.get('l_count')}\nMail: {cfg.get('mail')}\nNgày check: {cfg.get('last_active_date')}"
+        f"Ca (Auto): {current_ca}\n"
+        f"Giá (Fixed): 1k\n"
+        f"Tổng: {cfg.get('total')}\n"
+        f"Lần: {cfg.get('l_count')}\n"
+        f"Mail: {cfg.get('mail')}\n"
+        f"Ngày check: {cfg.get('last_active_date')}"
     )
 
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -253,8 +252,6 @@ def main():
     app.add_handler(CommandHandler("start", menu_command))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("setmail", setmail))
-    app.add_handler(CommandHandler("setca", setca))
-    app.add_handler(CommandHandler("setgia", setgia))
     app.add_handler(CommandHandler("rs", rs))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(MessageHandler(filters.VIDEO, on_video))
@@ -263,3 +260,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
