@@ -13,7 +13,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # --- CẤU HÌNH TOKEN ---
 # 👇👇👇 DÁN TOKEN CỦA BẠN VÀO DƯỚI ĐÂY 👇👇👇
-BOT_TOKEN = "8412922032:AAHnZ9c_q4jZLvMq8x5Qxh_a-pPh8O5_yF4" 
+BOT_TOKEN = "8412922032:AAEhSPEammbSWgggYDaegNnbOr1wR0BWhh8" 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -186,7 +186,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n--- CỐ ĐỊNH ---\n"
         "• Giá: 1k\n"
         "• Ca: Tự động (6h-15h: Ca1, 15h-19h: Ca2, 19h-6h: Ca3)\n"
-        "*(Bot tự động reset TẤT CẢ khi qua ngày mới)*"
+        "*(Bot trả kết quả kèm Video)*"
     )
 
 async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,7 +194,7 @@ async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_mail = context.args[0].strip().lower()
     final_mail = f"{raw_mail.split('@')[0]}@gmail.com" if "@" in raw_mail else f"{raw_mail}@gmail.com"
     
-    # CẬP NHẬT NGÀY LUÔN ĐỂ KHÔNG BỊ RESET KHI GỬI VIDEO
+    # CẬP NHẬT NGÀY LUÔN
     set_chat_cfg(update.effective_chat.id, mail=final_mail, last_active_date=get_vn_date_str())
     await update.message.reply_text(f"✅ Đã lưu mail: {final_mail}")
 
@@ -206,7 +206,6 @@ async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cfg = get_chat_cfg(update.effective_chat.id)
-    # Tính Ca hiện tại để hiển thị
     current_ca = get_auto_ca()
     
     await update.message.reply_text(
@@ -240,8 +239,15 @@ async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ip, rp = parse_ip_rp_copy_style(caption)
     if not ip or rp is None: return await msg.reply_text("❌ Lỗi: Thiếu IP hoặc RP.")
 
+    # Lấy nội dung báo cáo
     text = format_template(cfg, ip=ip, rp=rp)
-    await msg.reply_text(text, reply_to_message_id=msg.message_id)
+    
+    # --- THAY ĐỔI Ở ĐÂY: TRẢ LẠI VIDEO KÈM CAPTION ---
+    await msg.reply_video(
+        video=msg.video.file_id,    # Lấy ID video bạn vừa gửi
+        caption=text,               # Gắn báo cáo vào caption
+        reply_to_message_id=msg.message_id
+    )
 
 def main():
     if not BOT_TOKEN or "TOKEN" in BOT_TOKEN:
