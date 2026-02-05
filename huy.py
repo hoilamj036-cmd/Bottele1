@@ -14,7 +14,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # --- CẤU HÌNH TOKEN ---
 # 👇👇👇 DÁN TOKEN CỦA BẠN VÀO DƯỚI ĐÂY 👇👇👇
-BOT_TOKEN = "8412922032:AAEaSxCIDmzcC0IR2Zzu2_O-rJZK-5RtDOk" 
+BOT_TOKEN = "8412922032:AAGFya0I9pEQK5u-8GbXywxUuwCN_U3sJd0" 
 
 # --- BỘ NHỚ ĐỆM ĐỂ GOM VIDEO ---
 ALBUM_BUFFER = {} 
