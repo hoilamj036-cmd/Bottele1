@@ -3,22 +3,21 @@ import re
 import json
 import time
 import threading
-import asyncio  # <--- Thêm thư viện này để xử lý chờ
+import asyncio 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, Dict, Any, List
 
 # Thư viện cho web server ảo và Telegram
 from flask import Flask
-from telegram import Update
+from telegram import Update, InputMediaVideo # <--- Quan trọng: Thêm InputMediaVideo
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # --- CẤU HÌNH TOKEN ---
 # 👇👇👇 DÁN TOKEN CỦA BẠN VÀO DƯỚI ĐÂY 👇👇👇
-BOT_TOKEN = "8412922032:AAFvyiZ4Xm8NciX5jLFvX1Gbb_OoEEyO8_Y" 
+BOT_TOKEN = "8412922032:AAEaSxCIDmzcC0IR2Zzu2_O-rJZK-5RtDOk" 
 
-# --- BỘ NHỚ TẠM CHO MEDIA GROUP ---
-# Dùng để lưu nội dung báo cáo của video đầu tiên để dán cho các video sau
-GROUP_CACHE = {} 
+# --- BỘ NHỚ ĐỆM ĐỂ GOM VIDEO ---
+ALBUM_BUFFER = {} 
 
 # --- PHẦN GIỮ BOT SỐNG (KEEP ALIVE) CHO RENDER ---
 app = Flask(__name__)
@@ -132,7 +131,7 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "=== MENU ===\n/setmail <mail>\n/rs : Xoá TẤT CẢ\n/status : Xem info\n"
-        "• Giá: 1k (Fixed)\n• Ca: Auto (6h-15h-19h)\n*(Bot trả lại full album video)*"
+        "• Giá: 1k (Fixed)\n• Ca: Auto (6h-15h-19h)\n*(Bot trả lại Video theo Album)*"
     )
 
 async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -150,55 +149,75 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cfg = get_chat_cfg(update.effective_chat.id)
     await update.message.reply_text(f"Ca: {get_auto_ca()}\nGiá: 1k\nTổng: {cfg.get('total')}\nLần: {cfg.get('l_count')}\nMail: {cfg.get('mail')}")
 
+# --- LOGIC GỬI ALBUM ---
+async def send_album_delayed(chat_id, group_id, context):
+    """Hàm này đợi 2s rồi gửi tất cả video trong buffer đi 1 lần"""
+    await asyncio.sleep(2) # Đợi các video khác tới đủ
+    
+    if group_id not in ALBUM_BUFFER: return
+
+    data = ALBUM_BUFFER[group_id]
+    del ALBUM_BUFFER[group_id] # Xóa khỏi bộ nhớ đệm
+
+    # Nếu không tính toán được nội dung (do không có caption ở bất kỳ video nào) -> Bỏ qua
+    if not data.get('text'): return 
+
+    # Tạo danh sách Media để gửi
+    media_group = []
+    files = data['files'] # Danh sách file_id
+    text = data['text']
+
+    for i, file_id in enumerate(files):
+        # Chỉ gắn caption vào video đầu tiên
+        caption = text if i == 0 else None
+        media_group.append(InputMediaVideo(media=file_id, caption=caption))
+
+    try:
+        # Gửi cả cục đi 1 lúc
+        await context.bot.send_media_group(chat_id=chat_id, media=media_group, reply_to_message_id=data['reply_id'])
+    except Exception as e:
+        print(f"Lỗi gửi album: {e}")
+
 async def on_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    cfg = get_chat_cfg(chat_id)
-    cfg["_chat_id"] = chat_id
     msg = update.message
     if not msg or not msg.video: return
 
-    # Xử lý Group Cache (Để trả lời cả album)
     group_id = msg.media_group_id
     caption = (msg.caption or "").strip()
-    result_text = None
+    
+    # 1. NẾU LÀ VIDEO ĐƠN LẺ (KHÔNG PHẢI ALBUM)
+    if not group_id:
+        if not caption: return
+        ip, rp = parse_ip_rp_copy_style(caption)
+        if ip and rp is not None:
+            cfg = get_chat_cfg(chat_id)
+            cfg["_chat_id"] = chat_id
+            text = format_template(cfg, ip=ip, rp=rp)
+            await msg.reply_video(video=msg.video.file_id, caption=text, reply_to_message_id=msg.message_id)
+        return
 
-    # TRƯỜNG HỢP 1: Video có Caption (Video chính)
+    # 2. NẾU LÀ ALBUM (NHIỀU VIDEO)
+    # Nếu là video đầu tiên của nhóm mà bot thấy -> Tạo bộ đệm
+    if group_id not in ALBUM_BUFFER:
+        ALBUM_BUFFER[group_id] = {
+            'files': [], 
+            'text': None, 
+            'reply_id': msg.message_id # Reply vào tin nhắn đầu tiên
+        }
+        # Kích hoạt bộ đếm ngược để gửi
+        asyncio.create_task(send_album_delayed(chat_id, group_id, context))
+
+    # Thêm video hiện tại vào danh sách
+    ALBUM_BUFFER[group_id]['files'].append(msg.video.file_id)
+
+    # Nếu video này có caption -> Tính toán và lưu nội dung báo cáo
     if caption:
         ip, rp = parse_ip_rp_copy_style(caption)
         if ip and rp is not None:
-            # Tính toán và tạo nội dung báo cáo
-            result_text = format_template(cfg, ip=ip, rp=rp)
-            # Lưu vào bộ nhớ tạm nếu là album
-            if group_id:
-                GROUP_CACHE[group_id] = {'text': result_text, 'time': time.time()}
-
-    # TRƯỜNG HỢP 2: Video không Caption nhưng thuộc Album
-    elif group_id:
-        # Tìm trong bộ nhớ xem có anh em nào đã tính toán chưa
-        if group_id in GROUP_CACHE:
-            result_text = GROUP_CACHE[group_id]['text']
-        else:
-            # Nếu chưa thấy (do video không caption đến trước), đợi 1.5s rồi tìm lại
-            await asyncio.sleep(1.5) 
-            if group_id in GROUP_CACHE:
-                result_text = GROUP_CACHE[group_id]['text']
-
-    # Gửi trả video nếu có nội dung báo cáo
-    if result_text:
-        try:
-            await msg.reply_video(
-                video=msg.video.file_id,
-                caption=result_text,
-                reply_to_message_id=msg.message_id
-            )
-        except Exception as e:
-            print(f"Lỗi gửi video: {e}")
-
-    # Dọn dẹp bộ nhớ cache (xóa cái cũ quá 1 phút)
-    current_time = time.time()
-    to_remove = [k for k, v in GROUP_CACHE.items() if current_time - v['time'] > 60]
-    for k in to_remove:
-        del GROUP_CACHE[k]
+            cfg = get_chat_cfg(chat_id)
+            cfg["_chat_id"] = chat_id
+            ALBUM_BUFFER[group_id]['text'] = format_template(cfg, ip=ip, rp=rp)
 
 def main():
     if not BOT_TOKEN or "TOKEN" in BOT_TOKEN:
@@ -217,4 +236,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-              
+    
