@@ -111,6 +111,7 @@ def format_template(cfg: Dict[str, Any], ip: str, rp: int) -> str:
     current_mail = cfg.get("mail", "")
     auto_ca = get_auto_ca()
     
+    # Reset toàn bộ nếu qua ngày mới (trong trường hợp chưa gõ setmail)
     if last_date != date_str:
         current_total = 0
         current_l = 0
@@ -138,7 +139,17 @@ async def setmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args: return await update.message.reply_text("Dùng: /setmail <mail>")
     raw = context.args[0].strip().lower()
     final = f"{raw.split('@')[0]}@gmail.com" if "@" in raw else f"{raw}@gmail.com"
-    set_chat_cfg(update.effective_chat.id, mail=final, last_active_date=get_vn_date_str())
+    
+    chat_id = update.effective_chat.id
+    cfg = get_chat_cfg(chat_id)
+    date_str = get_vn_date_str()
+    
+    # Fix lỗi: Nếu gõ setmail vào ngày mới, tự động reset tổng và l_count về 0
+    if cfg.get("last_active_date") != date_str:
+        set_chat_cfg(chat_id, mail=final, total=0, l_count=0, last_active_date=date_str)
+    else:
+        set_chat_cfg(chat_id, mail=final)
+        
     await update.message.reply_text(f"✅ Đã lưu: {final}")
 
 async def rs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -236,6 +247,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-
-
